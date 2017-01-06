@@ -106,7 +106,7 @@ BinaryOutcomeModel  <- R6Class(classname = "BinaryOutcomeModel",
       # ***************************************************************************
       # Add any additional options passed on to modeling functions as extra args
       # ***************************************************************************
-      if (self$fit.package %in% c("h2o", "h2oEnsemble")) {
+      if (self$fit.package %in% c("h2o")) {
         self$binomialModelObj <- BinomialH2O$new(fit.algorithm = self$fit.algorithm, fit.package = self$fit.package, ParentModel = self, ...)
       } else {
         self$binomialModelObj <- BinomialGLM$new(fit.algorithm = self$fit.algorithm, fit.package = self$fit.package, ParentModel = self, ...)
@@ -235,7 +235,7 @@ BinaryOutcomeModel  <- R6Class(classname = "BinaryOutcomeModel",
         if (length(subset_idx) != self$n) stop("binomialModelObj$define.subset.idx: self$n is not equal to nobs*p!")
       }
       assert_that((length(subset_idx) == self$n) || (length(subset_idx) == 1L))
-      self$subset_idx <- subset_idx
+      self$subset_idx <- which(subset_idx)
       return(invisible(self))
     },
 
@@ -322,7 +322,8 @@ DeterministicBinaryOutcomeModel  <- R6Class(classname = "DeterministicBinaryOutc
       self$define.subset.idx(data)
       private$probA1 <- data$get.outvar(TRUE, self$gstar.Name)
       # private$.isNA.probA1 <- is.na(private$probA1)
-      self$subset_idx <- rep.int(TRUE, self$n)
+      # self$subset_idx <- rep.int(TRUE, self$n)
+      self$subset_idx <- seq_len(self$n)
       private$.outvar <- data$get.outvar(TRUE, self$getoutvarnm) # Always a vector of 0/1
       # private$.isNA.outvar <- is.na(private$.outvar)
       self$is.fitted <- TRUE

@@ -141,17 +141,17 @@ fit.h2odeeplearning <- function(fit.class, fit, training_frame, y, x, model_cont
 predictP1.H2Omodel <- function(m.fit, ParentObject, DataStorageObject, subset_idx, n, ...) {
   assert_that(!is.null(subset_idx))
   if (!missing(DataStorageObject)) {
-    rows_subset <- which(subset_idx)
+    # rows_subset <- which(subset_idx)
     data <- DataStorageObject
     outvar <- m.fit$params$outvar
     predvars <- m.fit$params$predvars
 
     # 1. works on a single core, but fails in parallel:
-    subsetH2Oframe <- data$fast.load.to.H2O(data$dat.sVar[rows_subset, c(outvar, predvars), with = FALSE],
+    subsetH2Oframe <- data$fast.load.to.H2O(data$dat.sVar[subset_idx, c(outvar, predvars), with = FALSE],
                                             saveH2O = FALSE,
                                             destination_frame = "subsetH2Oframe")
     #2. old, slower approach, but may work on many cores (since data is loaded only once)
-    # subsetH2Oframe <- data$H2O.dat.sVar[rows_subset, c(outvar, predvars)]
+    # subsetH2Oframe <- data$H2O.dat.sVar[subset_idx, c(outvar, predvars)]
     # old version of setting data, no longer used:
     # ParentObject$setdata(data, subset_idx = subset_idx, getoutvar = FALSE, getXmat = FALSE)
 
@@ -160,7 +160,8 @@ predictP1.H2Omodel <- function(m.fit, ParentObject, DataStorageObject, subset_id
   }
 
   pAout <- rep.int(gvars$misval, n)
-  if (sum(subset_idx) > 0) {
+  if (length(subset_idx) > 0) {
+  # if (sum(subset_idx) > 0) {
     predictFrame <- h2o::h2o.predict(m.fit$H2O.model.object, newdata = subsetH2Oframe)
     # predictObject <- predict(m.fit$H2O.model.object, newdata = subsetH2Oframe)
     # predictFrame <- predictObject$pred
@@ -179,17 +180,17 @@ predictP1.H2Omodel <- function(m.fit, ParentObject, DataStorageObject, subset_id
 predictP1.H2Oensemblemodel <- function(m.fit, ParentObject, DataStorageObject, subset_idx, n, ...) {
   assert_that(!is.null(subset_idx))
   if (!missing(DataStorageObject)) {
-    rows_subset <- which(subset_idx)
+    # rows_subset <- which(subset_idx)
     data <- DataStorageObject
     outvar <- m.fit$params$outvar
     predvars <- m.fit$params$predvars
 
     # 1. works on a single core, but fails in parallel:
-    subsetH2Oframe <- data$fast.load.to.H2O(data$dat.sVar[rows_subset, c(outvar, predvars), with = FALSE],
+    subsetH2Oframe <- data$fast.load.to.H2O(data$dat.sVar[subset_idx, c(outvar, predvars), with = FALSE],
                                             saveH2O = FALSE,
                                             destination_frame = "subsetH2Oframe")
     #2. old, slower approach, but may work on many cores (since data is loaded only once)
-    # subsetH2Oframe <- data$H2O.dat.sVar[rows_subset, c(outvar, predvars)]
+    # subsetH2Oframe <- data$H2O.dat.sVar[subset_idx, c(outvar, predvars)]
     # old version of setting data, no longer used:
     # ParentObject$setdata(data, subset_idx = subset_idx, getoutvar = FALSE, getXmat = FALSE)
 
@@ -198,7 +199,8 @@ predictP1.H2Oensemblemodel <- function(m.fit, ParentObject, DataStorageObject, s
   }
 
   pAout <- rep.int(gvars$misval, n)
-  if (sum(subset_idx) > 0) {
+  # if (sum(subset_idx) > 0) {
+  if (length(subset_idx) > 0) {
     predictObject <- predict(m.fit$H2O.model.object, newdata = subsetH2Oframe)
     predictFrame <- predictObject$pred
     if ("p1" %in% colnames(predictFrame)) {
@@ -241,24 +243,6 @@ For instructions on using h2o and installing its latest version for R go to:
         call. = FALSE)
       }
 
-      if (fit.algorithm %in% "SuperLearner") {
-        if (!requireNamespace("h2oEnsemble", quietly = TRUE)) {
-          stop(
-"Package h2oEnsemble is needed for modeling with SuperLearner.
-Please install it by typing this into R terminal:
-  library(devtools)
-  install_github(\"h2oai/h2o-3/h2o-r/ensemble/h2oEnsemble-package\")",
-          call. = FALSE)
-        }
-
-        if (!"package:h2oEnsemble" %in% search())
-          stop(
-"must load 'h2oEnsemble' package prior to using the SuperLearner.
-Please type this into the R terminal:
-  library('h2oEnsemble')",
-          call. = FALSE)
-      }
-
       self$fit.class <- fit.algorithm
       class(self$fit.class) <- c(class(self$fit.class), "h2o" %+% self$fit.class)
       invisible(self)
@@ -267,7 +251,8 @@ Please type this into the R terminal:
     fit = function(data, outvar, predvars, subset_idx, ...) {
       assert_that(is.DataStorageClass(data))
       self$setdata(data, subset_idx, self$classify, ...)
-      if ((length(predvars) == 0L) || (sum(subset_idx) == 0L) || (length(self$outfactors) < 2L)) {
+      if ((length(predvars) == 0L) || (length(subset_idx) == 0L) || (length(self$outfactors) < 2L)) {
+      # if ((length(predvars) == 0L) || (sum(subset_idx) == 0L) || (length(self$outfactors) < 2L)) {
         message("unable to run " %+% self$fit.class %+% " with h2o for: intercept only models or designmat with zero rows or  constant outcome (y) ...")
         class(self$model.fit) <- "try-error"
         self$emptydata
@@ -294,7 +279,7 @@ Please type this into the R terminal:
     setdata = function(data, subset_idx, classify = TRUE, getoutvar = TRUE, ...) {
       outvar <- self$ParentModel$outvar
       predvars <- self$ParentModel$predvars
-      rows_subset <- which(subset_idx)
+      # rows_subset <- which(subset_idx)
       # a penalty for being able to obtain predictions from predictAeqA() right after fitting: need to store Yvals
       if (getoutvar) private$Yvals <- data$get.outvar(subset_idx, outvar) # Always a vector
 
@@ -311,7 +296,7 @@ Please type this into the R terminal:
       # ---------------------------------------------------
       # 1. works on single core but fails in parallel:
       load_subset_t <- system.time(
-        subsetH2Oframe <- data$fast.load.to.H2O(data$dat.sVar[rows_subset, c(outvar, predvars, data$fold_column), with = FALSE],
+        subsetH2Oframe <- data$fast.load.to.H2O(data$dat.sVar[subset_idx, c(outvar, predvars, data$fold_column), with = FALSE],
                                                 saveH2O = FALSE,
                                                 destination_frame = "newH2Osubset")
       )
@@ -325,7 +310,7 @@ Please type this into the R terminal:
       # resuling in an error
       # ---------------------------------------------------
       # subset_t <- system.time(
-      #   subsetH2Oframe <- data$H2O.dat.sVar[rows_subset, c(outvar, predvars)]
+      #   subsetH2Oframe <- data$H2O.dat.sVar[subset_idx, c(outvar, predvars)]
       # )
       # if (gvars$verbose) {
       #   print("time to subset data into H2OFRAME: "); print(subset_t)

@@ -15,7 +15,7 @@
 detect.col.types <- function(sVar_mat){
   detect_vec_type <- function(vec) {
     vec_nomiss <- vec[!gvars$misfun(vec)]
-    nvals <- length(unique(vec_nomiss))
+    nvals <- data.table::uniqueN(vec_nomiss)
     if (nvals <= 2L) {
       sVartypes$bin
     } else if ((nvals <= maxncats) && (is.integerish(vec_nomiss))) {
@@ -27,7 +27,6 @@ detect.col.types <- function(sVar_mat){
   assert_that(is.integerish(getopt("maxncats")) && getopt("maxncats") > 1)
   maxncats <- getopt("maxncats")
   sVartypes <- gvars$sVartypes
-
   if (is.matrix(sVar_mat)) { # for matrix:
     return(as.list(apply(sVar_mat, 2, detect_vec_type)))
   } else if (is.data.table(sVar_mat)) { # for data.table:
@@ -192,7 +191,7 @@ DataStorageClass <- R6Class(classname = "DataStorageClass",
     modelfit.gA = NULL,
     modelfit.gN = NULL,
     new.factor.names = NULL,
-    noCENScat = 0L,        # The level (integer) that indicates CONTINUATION OF FOLLOW-UP for ALL censoring variables
+    noCENScat = 0L,         # The level (integer) that indicates CONTINUATION OF FOLLOW-UP for ALL censoring variables
     YnodeVals = NULL,       # Values of the binary outcome (Ynode) in observed data where det.Y = TRUE obs are set to NA
     det.Y = NULL,           # Logical vector, where YnodeVals[det.Y==TRUE] are deterministic (0 or 1)
     curr_data_A_g0 = TRUE,  # is the current data in OdataDT generated under observed (g0)? If FALSE, current data is under g.star (intervention)
@@ -219,6 +218,7 @@ DataStorageClass <- R6Class(classname = "DataStorageClass",
 
       if (!missing(YnodeVals)) self$addYnode(YnodeVals = YnodeVals, det.Y = det.Y)
 
+      if (gvars$verbose) print("...detecting the type of each input column...")
       self$def.types.sVar() # Define the type of each sVar[i]: bin, cat or cont
 
       invisible(self)
@@ -279,7 +279,6 @@ DataStorageClass <- R6Class(classname = "DataStorageClass",
     # ---------------------------------------------------------------------
     get.dat.sVar = function(rowsubset = TRUE, covars) {
       if (!missing(covars)) {
-        # browser()
         if (length(unique(colnames(self$dat.sVar))) < length(colnames(self$dat.sVar))) {
           warning("repeating column names in the final data set; please check for duplicate summary measure / node names")
         }
@@ -473,7 +472,8 @@ DataStorageClass <- R6Class(classname = "DataStorageClass",
     # Modify the values in node nodes_to_repl in self$dat.sVar with values from source_for_repl using only the IDs in subset_idx:
     replaceNodesVals = function(subset_idx, nodes_to_repl = intervened_NODE, source_for_repl = NodeNames) {
       for (node_idx in seq_along(nodes_to_repl)) {
-        if (sum(subset_idx) > 0) {
+        if (length(subset_idx) > 0) {
+        # if (sum(subset_idx) > 0) {
           source_node <- self$dat.sVar[subset_idx, (source_for_repl[node_idx]), with = FALSE][[source_for_repl[node_idx]]]
           self$dat.sVar[subset_idx, (nodes_to_repl[node_idx]) := as.numeric(source_node)]
         }
@@ -561,6 +561,31 @@ DataStorageClass <- R6Class(classname = "DataStorageClass",
       return(gstarNodes_stoch)
     },
 
+    check_norows_after_event = function() {
+      rows.exist.after.FAIL <- self$dat.sVar[, {outrow = which(get(self$nodes$Ynode) %in% 1L);
+                                                LastRowIdx = .I[.N];
+                                                StartRemoveRow = LastRowIdx - (.N - outrow) + 1;
+                                                rows.exist =  (outrow != .N) && length(outrow) > 0;
+                                                list(rows.exist = rows.exist, StartRemoveRow = StartRemoveRow, LastRowIdx = LastRowIdx)},
+                                              by = eval(self$nodes$IDnode)][!is.na(rows.exist), ]
+
+      if (any(rows.exist.after.FAIL[["rows.exist"]])) {
+        rows.exist.after.FAIL <- rows.exist.after.FAIL[rows.exist.after.FAIL[["rows.exist"]], ]
+        rows.exist.after.FAIL[, removeIDX := list(list((StartRemoveRow:LastRowIdx))), by = eval(self$nodes$IDnode)]
+        idx.to.remove <- unlist(rows.exist.after.FAIL[["removeIDX"]])
+        self$dat.sVar <- self$dat.sVar[!idx.to.remove, ]
+        msg <- "Found " %+% length(idx.to.remove) %+% " extra rows after time-to-event (outcome) occurrence.
+        Such rows aren't allowed and thus have been removed automatically.
+        Unfortunately, this requires making a copy of the input data itself, doublying the amount of used RAM.
+        If available RAM becomes an issue, consider first removing the original input data from memory by typing 'rm(...)',
+        since its no longer needed for running stremr.
+        To conserve RAM please consider removing these extra rows from your data!"
+        warning(msg)
+        message(msg)
+      }
+      invisible(return(self))
+    },
+
     # ---------------------------------------------------------------------------
     # Cast long format data into wide format:
     # bslcovars - names of covariates that shouldn't be cast (remain invariant with t)
@@ -639,7 +664,7 @@ It can be done by typing this into R terminal:
 
         # Temp file to write to:
         tmpf <- tempfile(fileext = ".csv")
-        data.table::fwrite(dat.sVar, tmpf, turbo = TRUE, verbose = TRUE, na = "NA_h2o")
+        data.table::fwrite(dat.sVar, tmpf, verbose = TRUE, na = "NA_h2o")
         H2O.dat.sVar <- h2o::h2o.importFile(path = tmpf,
                                             header = TRUE,
                                             col.types = types,
@@ -796,135 +821,3 @@ It can be done by typing this into R terminal:
     }
   )
 )
-
-# ## ---------------------------------------------------------------------
-# ## For networks can just expand on the basic DataStorage class and add appropriate network-related fields:
-# ## ---------------------------------------------------------------------
-# R6 class for storing, managing, subsetting and manipulating the input data for networks.
-#
-# @docType class
-# @format An \code{\link{R6Class}} generator object
-# @keywords R6 class
-# @details
-# \itemize{
-# \item{\code{sW}} - Baseline summaries
-# \item{\code{sA}} - Exposure summaries
-# \item{\code{intervene1.sA}} - Intervention object 1
-# \item{\code{intervene2.sA}} - Intervention object 2
-# }
-# @section Methods:
-# \describe{
-#   \item{\code{new(Odata, nodes, YnodeVals, det.Y, ...)}}{...}
-#   \item{\code{make.sVar(type.sVar = NULL)}}{...}
-# }
-# @section Active Bindings:
-# \describe{
-#    \item{\code{save_sA_Vars}}{...}
-#    \item{\code{restored_sA_Vars}}{...}
-# }
-# DatNetStorageClass <- R6Class(classname = "DatNetStorageClass",
-#   inherit = DataStorageClass,
-#   portable = TRUE,
-#   class = TRUE,
-#   public = list(
-#     Kmax = integer(),          # max n of Friends in the network
-#     nFnode = "nF",
-#     netind_cl = NULL,          # class NetIndClass object holding $NetInd_k network matrix
-#     sW = NULL,
-#     sA = NULL,
-#     intervene1.sA = NULL,
-#     intervene2.sA = NULL,
-#     sVar.object = NULL,        # DefineSummariesClass object that contains / evaluates sVar expressions
-
-#     initialize = function(Odata, nodes, YnodeVals, det.Y, netind_cl, nFnode, ...) {
-#       self$netind_cl <- netind_cl
-#       self$Kmax <- netind_cl$Kmax
-#       if (!missing(nFnode)) self$nFnode <- nFnode
-#       super$initialize(Odata, nodes, YnodeVals, det.Y, ...)
-#       invisible(self)
-#     },
-
-#     ## ---------------------------------------------------------------------
-#     # Define and evalute summary measure (sVar) data; Save it (and over-write prev. values) as self$dat.sVar
-#     ## ---------------------------------------------------------------------
-#     make.sVar = function(Odata, sVar.object = NULL, type.sVar = NULL) {
-#       if (missing(Odata)) {
-#         assert_that(!is.null(self$Odata))
-#       } else {
-#         self$Odata <- Odata
-#       }
-#       if (is.null(sVar.object)) {
-#         stop("Not Implemented. To Be replaced with netVar construction when sVar.object is null...")
-#       }
-#       self$sVar.object <- sVar.object
-#       self$dat.sVar <- sVar.object$eval.nodeforms(data.df = self$Odata$dat.sVar)
-#       self$def.types.sVar(type.sVar) # Define the type of each sVar[i]: bin, cat or cont
-#       invisible(self)
-#     },
-
-#     ## ---------------------------------------------------------------------
-#     # Save Anodes and summaries sA from main data.table into separate fields
-#     ## ---------------------------------------------------------------------
-#     backupAnodes = function(Anodes, sA) {
-#       if (missing(Anodes)) Anodes <- self$nodes$Anodes
-#       private$.A_g0_DT <- self$dat.sVar[, Anodes, with = FALSE]
-#       # Back-up the summary measures as well (to not have to reconstruct them):
-#       if (!missing(sA)) {
-#         sA.Vars <- unlist(sA$sVar.names.map)
-#         private$.save_sA_Vars <- sA.Vars[!sA.Vars%in%Anodes]
-#         private$.sA_g0_DT <- self$dat.sVar[, private$.save_sA_Vars, with = FALSE]
-#       }
-#       invisible(self)
-#     },
-
-#     ## ---------------------------------------------------------------------
-#     # Put saved Anodes and summaries sA back into main data.table
-#     ## ---------------------------------------------------------------------
-#     restoreAnodes = function(Anodes) {
-#       if (missing(Anodes)) Anodes <- self$nodes$Anodes
-#       if (is.null(private$.A_g0_DT)) stop("Anodes in dat.sVar cannot be restored, private$.A_g0_DT is null!")
-#       self$dat.sVar[, (Anodes) := private$.A_g0_DT, with=FALSE]
-#       if (!is.null(private$.sA_g0_DT) && !is.null(self$save_sA_Vars)) {
-#         self$dat.sVar[, (self$save_sA_Vars) := private$.sA_g0_DT, with = FALSE]
-#         private$.restored_sA_Vars <- TRUE
-#       } else {
-#         private$.restored_sA_Vars <- FALSE
-#       }
-#       invisible(self)
-#     },
-
-#     ## ---------------------------------------------------------------------
-#     # Swap re-saved Anodes and summaries sA with those in main data.table
-#     ## ---------------------------------------------------------------------
-#     swapAnodes = function(Anodes) {
-#       if (missing(Anodes)) Anodes <- self$nodes$Anodes
-#       # 1) Save the current values of Anodes and sA in the data:
-#       temp.Anodes <- self$dat.sVar[, Anodes, with = FALSE]
-#       if (!is.null(private$.sA_g0_DT) && !is.null(self$save_sA_Vars)) {
-#         temp.sA <- self$dat.sVar[, self$save_sA_Vars, with = FALSE]
-#       } else {
-#         temp.sA <- NULL
-#       }
-#       # 2) Restore previously saved Anodes / sA into the data:
-#       self$restoreAnodes()
-#       # 3) Over-write the back-up values with new ones:
-#       private$.A_g0_DT <- temp.Anodes
-#       private$.sA_g0_DT <- temp.sA
-#       # 4) Reverse the indicator of current data Anodes:
-#       self$curr_data_A_g0 <- !self$curr_data_A_g0
-#       invisible(self)
-#     }
-#   ),
-#   active = list(
-#     save_sA_Vars = function() { private$.save_sA_Vars },
-#     restored_sA_Vars = function() { private$.restored_sA_Vars }
-#   ),
-
-#   private = list(
-#     .saveGstarsDT = NULL,
-#     .A_g0_DT = NULL,              # Backed-up versions of the Anodes vars that come from the observed data
-#     .sA_g0_DT = NULL,             # Backed-up versions of the summaries in sA (but not Anodes) that come from the observed data
-#     .save_sA_Vars = NULL,         # Summary measure variables that were pre-saved (backed-up) and were not part of new.sA (Anodes)
-#     .restored_sA_Vars = FALSE     # Were the summary measures (not Anodes) restored as well? If not, they need to be reconstructed
-#   )
-# )

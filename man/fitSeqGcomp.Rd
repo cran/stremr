@@ -10,7 +10,8 @@ fitSeqGcomp(OData, t_periods, Qforms, Qstratify = NULL,
   intervened_MONITOR), collapse = ""), stratifyQ_by_rule = FALSE,
   TMLE = FALSE, iterTMLE = FALSE, IPWeights = NULL, stabilize = FALSE,
   trunc_weights = 10^6, params_Q = list(), weights = NULL,
-  max_iter = 50, tol.eps = 0.001, parallel = FALSE,
+  max_iter = 15, adapt_stop = TRUE, adapt_stop_factor = 10,
+  tol_eps = 0.001, parallel = FALSE,
   verbose = getOption("stremr.verbose"))
 }
 \arguments{
@@ -58,10 +59,21 @@ Must set \code{TMLE}=\code{FALSE} when setting this to \code{TRUE}.}
 \item{weights}{Optional \code{data.table} with additional observation-time-specific weights.  Must contain columns \code{ID}, \code{t} and \code{weight}.
 The column named \code{weight} is merged back into the original data according to (\code{ID}, \code{t}).}
 
-\item{max_iter}{Maximum number of iterations for iterative TMLE algorithm}
+\item{max_iter}{For iterative TMLE only: Integer, set to maximum number of iterations for iterative TMLE algorithm.}
 
-\item{tol.eps}{Numeric error tolerance for the iterative TMLE update.
-The iterative TMLE algorithm will stop when the absolute value of the TMLE intercept update is below \code{tol.eps}}
+\item{adapt_stop}{For iterative TMLE only: Choose between two stopping criteria for iterative TMLE, default is \code{TRUE},
+which will stop the iterative TMLE algorithm in an adaptive way. Specifically, the iterations will stop when the mean estimate
+of the efficient influence curve is less than or equal to 1 / (\code{adapt_stop_factor}*sqrt(\code{N})), where
+N is the total number of unique subjects in data and \code{adapt_stop_factor} is set to 10 by default.
+When \code{TRUE}, the argument \code{tol_eps} is ignored and TMLE stops when either \code{max_iter} has been reached or this criteria has been satisfied.
+When \code{FALSE}, the stopping criteria is determined by values of \code{max_iter} and \code{tol_eps}.}
+
+\item{adapt_stop_factor}{For iterative TMLE only: The adaptive factor to choose the stopping criteria for iterative TMLE when \code{adapt_stop} is set to \code{TRUE}. Default is 10.
+TMLE will keep iterative until
+the mean estimate of the efficient influence curve is less than 1 / (\code{adapt_stop_factor}*sqrt(\code{N})) or when the number of iterations is \code{max_iter}.}
+
+\item{tol_eps}{For iterative TMLE only: Numeric error tolerance for the iterative TMLE update.
+The iterative TMLE algorithm will stop when the absolute value of the TMLE intercept update is below \code{tol_eps}}
 
 \item{parallel}{Set to \code{TRUE} to run the sequential Gcomp or TMLE in parallel (uses \code{foreach} with \code{dopar} and requires a previously defined parallel back-end cluster)}
 
@@ -241,87 +253,6 @@ tmle_est <- fitTMLE(OData, t_periods = t.surv, intervened_TRT = "TI.set1",
             stratifyQ_by_rule = FALSE)
 }
 
-# ----------------------------------------------------------------------
-# Ensemble Learning with SuperLearner (using h2oEnsemble R package):
-# ----------------------------------------------------------------------
-\dontrun{
-require('h2oEnsemble')
-# ----------------------------------------------------------------------
-# Define many learners at once via grid search over tuning parameter spaces (hyperparameters)
-# ----------------------------------------------------------------------
-# 1. Runs h2o.grid in the background for each individual learner and saves cross-validated risks.
-# 2. Calls h2o.stack from h2oEnsemble package to evaluate the final SuperLearner.
-# ----------------------------------------------------------------------
-# Search criteria and grid search space for glm tuning parameters:
-GLM_hyper_params <- list(search_criteria = list(strategy = "RandomDiscrete", max_models = 5),
-                         alpha = c(0,1,seq(0.1,0.9,0.1)),
-                         lambda = c(0,1e-7,1e-5,1e-3,1e-1))
-
-# Search criteria and grid search space for Random Forests:
-search_criteria <- list(strategy = "RandomDiscrete", max_models = 5, max_runtime_secs = 60*60)
-RF_hyper_params <- list(search_criteria = search_criteria,
-                        ntrees = c(100, 200, 300, 500),
-                        mtries = 1:4,
-                        max_depth = c(5, 10, 15, 20, 25),
-                        sample_rate = c(0.7, 0.8, 0.9, 1.0),
-                        col_sample_rate_per_tree = c(0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8),
-                        balance_classes = c(TRUE, FALSE))
-
-# Search criteria and grid search space for Gradient Boosting Machines (gbm):
-GBM_hyper_params <- list(search_criteria = search_criteria,
-                         ntrees = c(100, 200, 300, 500),
-                         learn_rate = c(0.005, 0.01, 0.03, 0.06),
-                         max_depth = c(3, 4, 5, 6, 9),
-                         sample_rate = c(0.7, 0.8, 0.9, 1.0),
-                         col_sample_rate = c(0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8),
-                         balance_classes = c(TRUE, FALSE))
-
-# Specify individual learners to include in the SuperLearner library (in addition to grid models):
-h2o.glm.1 <- function(..., alpha = 0.0) h2o.glm.wrapper(..., alpha = alpha)
-h2o.glm.2 <- function(..., x = "highA1c", alpha = 0.0) h2o.glm.wrapper(..., x = x, alpha = alpha)
-h2o.glm.3 <- function(..., alpha = 1.0) h2o.glm.wrapper(..., alpha = alpha)
-
-# ----------------------------------------------------------------------
-# Put all different algorithms together to define the final model ensemble:
-# ----------------------------------------------------------------------
-SLparams = list(fit.package = "h2o", fit.algorithm = "SuperLearner",
-                 grid.algorithm = c("glm", "randomForest", "gbm"),
-                 learner = c("h2o.glm.1", "h2o.glm.2", "h2o.glm.3"),
-                 metalearner = "h2o.glm_nn",
-                 nfolds = 10,
-                 seed = 23,
-                 glm = GLM_hyper_params,
-                 randomForest = RF_hyper_params,
-                 gbm = GBM_hyper_params)
-
-# ----------------------------------------------------------------------
-# Use save.ensemble and ensemble.dir.path arguments to save the final SuperLearner fit
-# ----------------------------------------------------------------------
-# This will also save the individual learner fits in the same directory.
-# Only one directory per single SuperLearner fit is allowed.
-# Can be loaded later on to save time and avoid refitting SuperLearner (load.ensemble = TRUE).
-
-params_TRT = c(SLparams, save.ensemble = TRUE, ensemble.dir.path = "./h2o-ensemble-model-TRT")
-params_CENS = list(fit.package = "speedglm", fit.algorithm = "glm")
-params_MONITOR = list(fit.package = "speedglm", fit.algorithm = "glm")
-
-OData <- fitPropensity(OData,
-            gform_CENS = gform_CENS, stratify_CENS = stratify_CENS, params_CENS = params_CENS,
-            gform_TRT = gform_TRT, params_TRT = params_TRT,
-            gform_MONITOR = gform_MONITOR, params_MONITOR = params_MONITOR)
-
-# ----------------------------------------------------------------------
-# Re-using previously saved SuperLearner fit
-# ----------------------------------------------------------------------
-params_TRT = c(SLparams, load.ensemble = TRUE, ensemble.dir.path = "./h2o-ensemble-model-TRT")
-params_CENS = list(fit.package = "speedglm", fit.algorithm = "glm")
-params_MONITOR = list(fit.package = "speedglm", fit.algorithm = "glm")
-
-OData <- fitPropensity(OData,
-            gform_CENS = gform_CENS, stratify_CENS = stratify_CENS, params_CENS = params_CENS,
-            gform_TRT = gform_TRT, params_TRT = params_TRT,
-            gform_MONITOR = gform_MONITOR, params_MONITOR = params_MONITOR)
-}
 }
 \seealso{
 \code{\link{stremr-package}} for the general overview of the package,

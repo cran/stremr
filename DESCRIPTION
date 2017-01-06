@@ -1,7 +1,7 @@
 Package: stremr
 Title: Streamlined Estimation of Survival for Static, Dynamic and
         Stochastic Treatment and Monitoring Regimes
-Version: 0.2
+Version: 0.4
 Authors@R: c(
     person("Oleg", "Sofrygin", role=c("aut", "cre"), email="oleg.sofrygin@gmail.com"),
     person(c("Mark", "J."), "van der Laan", role="aut", email="laan@berkeley.edu"),
@@ -11,8 +11,7 @@ Description: Analysis of longitudinal time-to-event or time-to-failure data.
     stochastic interventions on treatment (exposure) and monitoring events over time. 
     Estimators (IPW, MSM-IPW, GCOMP, longitudinal TMLE) adjust for measured time-varying 
     confounding and informative right-censoring. Model fitting can be performed either 
-    with GLM or H2O-3 machine learning libraries, including the ensemble-based 
-    SuperLearner ('h2oEnsemble').
+    with GLM or H2O-3 machine learning libraries.
     The exposure, monitoring and censoring variables can be coded as either binary, 
     categorical or continuous. Each can be multivariate (e.g., can use more than one 
     column of dummy indicators for different censoring events). 
@@ -25,17 +24,15 @@ Depends: R (>= 3.2.1)
 Imports: assertthat, data.table, methods, R6, Rcpp, rmarkdown, pander,
         speedglm, stats, stringr, zoo
 LinkingTo: Rcpp
-Suggests: devtools, h2o, h2oEnsemble, knitr, magrittr, RUnit, foreach,
-        doParallel
-Additional_repositories: https://osofr.github.io/drat/
+Suggests: devtools, h2o, knitr, magrittr, RUnit, foreach, doParallel
 License: GPL (>= 2)
 LazyData: true
 RoxygenNote: 5.0.1
 NeedsCompilation: yes
-Packaged: 2016-10-02 18:01:09 UTC; olegsofrygin
+Packaged: 2017-01-06 02:29:23 UTC; olegsofrygin
 Author: Oleg Sofrygin [aut, cre],
   Mark J. van der Laan [aut],
   Romain Neugebauer [aut]
 Maintainer: Oleg Sofrygin <oleg.sofrygin@gmail.com>
 Repository: CRAN
-Date/Publication: 2016-10-03 08:17:49
+Date/Publication: 2017-01-06 10:09:22

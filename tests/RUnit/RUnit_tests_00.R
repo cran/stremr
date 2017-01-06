@@ -2,7 +2,7 @@
 
 if(FALSE) {
   # to automatically enter browser when error shows up:
-  options(error=recover)
+  # options(error=recover)
 
   library("RUnit")
   library("roxygen2")
@@ -49,10 +49,8 @@ if(FALSE) {
   # To install a specific branch:
   # devtools::install_github('osofr/stremr', ref = "simnet", build_vignettes = FALSE)
   # options(stremr.verbose = FALSE)
-  # devtools::install_github('osofr/stremr', build_vignettes = FALSE)
+  # devtools::install_github('osofr/stremr', build_vignettes = FALSE, dependencies = FALSE)
 
-  # To use drat repo:
-  # install.packages("h2oEnsemble", type = "source", repos = "https://osofr.github.io/drat/")
 }
 
 psi_RDs_DAG2a <- NULL

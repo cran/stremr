@@ -1,7 +1,7 @@
 # adding to appease CRAN check with non-standard eval in data.table:
 utils::globalVariables(c("gstar.CAN", "g0.CAN", "wt.by.t", "rule.follower.gCAN", "new.TRT.gstar",
                           "N.risk", "N.follow.rule", "stab.P", "cum.stab.P", "cum.IPAW",
-                          "rule.name", "glm.IPAW.predictP1", "St.KM", "Wt.OUTCOME", "ht", "ht.KM", "EIC_i_t0", "EIC_i_t1plus"))
+                          "rule.name", "glm.IPAW.predictP1", "St.KM", "Wt.OUTCOME", "ht", "ht.KM", "EIC_i_t0", "EIC_i_tplus"))
 
 # ---------------------------------------------------------------------------------------
 #' Import data, define various nodes, define dummies for factor columns and define OData R6 object
@@ -47,6 +47,13 @@ importData <- function(data, ID = "Subject_ID", t_name = "time_period", covars, 
   # The ordering of variables in this list is the assumed temporal order!
   nodes <- list(Lnodes = covars, Cnodes = CENS, Anodes = TRT, Nnodes = MONITOR, Ynode = OUTCOME, IDnode = ID, tnode = t_name)
   OData <- DataStorageClass$new(Odata = data, nodes = nodes, noCENScat = noCENScat)
+
+  # --------------------------------------------------------------------------------------------------------
+  # Check no extra rows after event:
+  # --------------------------------------------------------------------------------------------------------
+  OData$check_norows_after_event()
+
+
   # --------------------------------------------------------------------------------------------------------
   # Create dummies for factors
   # --------------------------------------------------------------------------------------------------------
@@ -725,6 +732,7 @@ survMSM <- function(wts_data, OData, t_breaks, use_weights = TRUE, stabilize = T
               MSM.intervals = MSM.intervals,
               IC.Var.S.d = IC.Var.S.d,
               nID = nID,
+              nobs = nrow(wts_data_used),
               wts_data = wts_data_used,
               use_weights = use_weights,
               trunc_weights = trunc_weights

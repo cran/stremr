@@ -11,22 +11,32 @@ opts_chunk$set(fig.path = figure.dir)
 panderOptions("table.split.table", Inf)
 
 #+ echo=FALSE, include=FALSE
-f_plot_survest <- function(surv_list, t, t_int_sel, y_lab, x_lab, miny, x_legend, y_legend) {
-  ptsize <- 0.7
+f_plot_survest <- function(surv_list, t, t_int_sel, y_lab, x_lab, miny, x_legend, y_legend, cex = 0.7) {
+  # ptsize <- 0.7
+  # ptsize <- 0.4
   counter <- 0
   if (missing(y_lab)) y_lab <- ""
   if (missing(x_lab)) x_lab <- "Follow-up period since study entry"
   if (missing(t)) t <- seq_along(surv_list[[1]])
   if (missing(t_int_sel)) t_int_sel <- seq_along(t)
   if (missing(miny)) miny <- min(unlist(lapply(surv_list, function(x) min(x[t_int_sel], na.rm = TRUE))))
-  if (missing(x_legend)) x_legend <- (max(t_int_sel, na.rm = TRUE) - min(t_int_sel, na.rm = TRUE)) * 2/3 + min(t_int_sel, na.rm = TRUE)
-  if (missing(y_legend)) y_legend <- (1 - miny) * 4/5 + miny
+  # if (missing(x_legend)) x_legend <- (max(t_int_sel, na.rm = TRUE) - min(t_int_sel, na.rm = TRUE)) * 2/3 + min(t_int_sel, na.rm = TRUE)
+  # if (missing(y_legend)) y_legend <- (1 - miny) * 4/5 + miny
   for(d.j in names(surv_list)){
     counter <- counter + 1
-    plot(as.integer(t[t_int_sel]), surv_list[[d.j]][t_int_sel], col = counter, type = 'b', cex = ptsize, ylim = c(miny, 1), ylab = y_lab, xlab = x_lab)
+    plot(as.integer(t[t_int_sel]), surv_list[[d.j]][t_int_sel], col = counter, type = 'b', cex = cex, ylim = c(miny, 1), ylab = y_lab, xlab = x_lab)
     par(new=TRUE)
   }
-  legend(x_legend, y_legend, legend = names(surv_list), col = c(1:length(names(surv_list))), cex = ptsize, pch = 1)
+  if (missing(y_legend)) {
+    if (missing(x_legend)) {
+      x_legend <- "bottomleft"
+    } else {
+      if (!is.character(x_legend)) stop("x_legend must be a character when y_legend is unspecified")
+    }
+    legend(x_legend, legend = names(surv_list), col = c(1:length(names(surv_list))), cex = cex, pch = 1)
+  } else {
+    legend(x_legend, y_legend, legend = names(surv_list), col = c(1:length(names(surv_list))), cex = cex, pch = 1)
+  }
 }
 f_obtain_TMLE_St <- function(TMLE, optArgReport) {
   sysArg <- list()
@@ -43,10 +53,10 @@ f_obtain_TMLE_St <- function(TMLE, optArgReport) {
 
 #'
 #' Number of unique independent units in the input data:
-{{prettyNum(OData$nuniqueIDs, big.mark = ",", scientific = FALSE)}}
+{{prettyNum(nuniqueIDs, big.mark = ",", scientific = FALSE)}}
 #'
 #' Number of person-time observations in the input data:
-{{prettyNum(OData$nobs, big.mark = ",", scientific = FALSE)}}
+{{prettyNum(nobs, big.mark = ",", scientific = FALSE)}}
 #'
 #' # Model fits for propensity scores
 #'
@@ -84,65 +94,68 @@ panderOptions('knitr.auto.asis', TRUE)
 
 #'\pagebreak
 #'
-#' `r ifelse(!is.null(WTtables),'# Distribution of the weights','')`
+#' `r ifelse(!missing(WTtables),'# Distribution of the weights','')`
 
 #+ echo=FALSE
-if (!is.null(WTtables)) {
-  pander::set.caption("Distribution of the stabilized IPA weights for all rule-person-time observations")
-  pander::pander(WTtables$summary.table, justify = c('right', rep("left",ncol(WTtables$summary.table)-1)))
+if (!missing(WTtables)) {
+  if (!is.null(WTtables)) {
+    pander::set.caption("Distribution of the stabilized IPA weights for all rule-person-time observations")
+    pander::pander(WTtables$summary.table, justify = c('right', rep("left",ncol(WTtables$summary.table)-1)))
+  }
 }
 
 #+ echo=FALSE
-if (!is.null(WTtables) & !is.null(WTtables$summary.DT.byrule)) {
-  pander::set.caption("Counts of the stabilized IPA weights by each rule")
-  pander::pander(WTtables$summary.DT.byrule, justify = c('right', rep("left",ncol(WTtables$summary.DT.byrule)-1)))
+if (!missing(WTtables)) {
+  if (!is.null(WTtables) && !is.null(WTtables$summary.DT.byrule)) {
+    pander::set.caption("Counts of the stabilized IPA weights by each rule")
+    pander::pander(WTtables$summary.DT.byrule, justify = c('right', rep("left",ncol(WTtables$summary.DT.byrule)-1)))
+  }
 }
 
 #'\pagebreak
 #'
-#' `r ifelse(AddFUPtables,'# Distribution of the follow-up times','')`
+#' `r ifelse(!missing(FUPtables),'# Distribution of the follow-up times','')`
 
 #+ echo=FALSE
-if (AddFUPtables && (!missing(MSM) || !missing(wts_data))) {
-  if (!missing(MSM)) wts_data <- MSM$wts_data
-  wts_data <- format_wts_data(wts_data)
-  t.name.col <- OData$nodes$tnode
-  ID.name.col <- OData$nodes$IDnode
-  follow_up_rule_ID <- wts_data[cum.IPAW > 0, list(max.t = max(get(t.name.col), na.rm = TRUE)), by = list(get(ID.name.col), get("rule.name"))]
-  data.table::setnames(follow_up_rule_ID, c(OData$nodes$IDnode, "rule.name", "max.t"))
-  data.table::setkeyv(follow_up_rule_ID, cols = OData$nodes$IDnode)
-  rules <- unique(wts_data[["rule.name"]])
-  for (T.rule in rules) {
-    one_ruleID <- follow_up_rule_ID[(rule.name %in% eval(T.rule)), max.t]
-    hist(one_ruleID, main = "Maximum follow-up period for TRT/MONITOR rule: " %+% T.rule)
+if (!missing(FUPtables)) {
+  if (!is.null(FUPtables)) {
+    rules <- unique(FUPtables[["rule.name"]])
+    for (T.rule in rules) {
+      one_ruleID <- FUPtables[(rule.name %in% eval(T.rule)), max.t]
+      hist(one_ruleID, main = "Maximum follow-up period for TRT/MONITOR rule: " %+% T.rule)
+    }
   }
 }
 
 #+ echo=FALSE, results='asis'
-if (AddFUPtables && (!missing(MSM) || !missing(wts_data))) {
-  for (T.rule in rules) {
-    one_ruleID <- follow_up_rule_ID[(rule.name %in% eval(T.rule)), max.t]
-    panderOptions('knitr.auto.asis', FALSE)
-    followupTimes <- table(one_ruleID)
-    followupTimes <- makeFreqTable(followupTimes)
-    pander::pander(followupTimes, caption = "Distribution of the total follow-up time for TRT/MONITOR rule: " %+% T.rule)
-    pander::pander(summary(one_ruleID), caption = "Min/Max/Quantiles for the total follow-up time for TRT/MONITOR rule: " %+% T.rule)
-    panderOptions('knitr.auto.asis', TRUE)
+if (!missing(FUPtables)) {
+  if (!is.null(FUPtables)) {
+    rules <- unique(FUPtables[["rule.name"]])
+    for (T.rule in rules) {
+      one_ruleID <- FUPtables[(rule.name %in% eval(T.rule)), max.t]
+      panderOptions('knitr.auto.asis', FALSE)
+      followupTimes <- table(one_ruleID)
+      followupTimes <- makeFreqTable(followupTimes)
+      # followupTimes <- makeFreqTable(table(one_ruleID))
+      pander::pander(followupTimes, caption = "Distribution of the total follow-up time for TRT/MONITOR rule: " %+% T.rule)
+      pander::pander(summary(one_ruleID), caption = "Min/Max/Quantiles for the total follow-up time for TRT/MONITOR rule: " %+% T.rule)
+      panderOptions('knitr.auto.asis', TRUE)
+    }
   }
 }
 
 #'\pagebreak
 #'
-#' `r ifelse(!missing(NPMSM),'# Survival with IPW-Adjusted Kaplan-Meier (Non-Parametric MSM) and Standard KM','')`
+#' `r ifelse(!missing(NPMSM),'# Survival with IPW-Adjusted Kaplan-Meier (Non-Parametric / Saturated MSM for Hazard)','')`
 
-#+ echo=FALSE, fig.width=5, fig.height=5, fig.cap = "IPW-Adjusted KM and KM Survival.\\label{fig:survPlotGCOMP}"
+#+ echo=FALSE, fig.width=5, fig.height=5, fig.cap = "Survival with IPW-Adjusted KM.\\label{fig:survPlotGCOMP}"
 if (!missing(NPMSM)) {
   sysArg <- list()
   if (is.data.table(NPMSM)) NPMSM <- list(NPMSM_res = NPMSM)
   surv_tables <- lapply(NPMSM, '[[', 'IPW_estimates')
-  sysArg$surv_list <- c(lapply(surv_tables, '[[', 'St.IPTW'), lapply(surv_tables, '[[', 'St.KM'))
+  sysArg$surv_list <- lapply(surv_tables, '[[', 'St.IPTW')
   rule.names <- unlist(lapply(surv_tables, function(NPMSM_res) NPMSM_res[['rule.name']][1]))
-  names(sysArg$surv_list) <- c(paste0("IPW.KM: ", rule.names), paste0("KM: ", rule.names))
+  names(sysArg$surv_list) <- paste0("St.IPTW: ", rule.names)
   sysArg$t <- NPMSM[[1]][["t"]]
   userArg <- intersect(names(formals(f_plot_survest)), names(optArgReport)) # captures optional arguments given by user for customizing report
   if(length(userArg) > 0) sysArg <- c(sysArg, optArgReport[userArg])
@@ -151,7 +164,7 @@ if (!missing(NPMSM)) {
 
 #+ echo=FALSE, results='asis'
 panderOptions('knitr.auto.asis', FALSE)
-if (!missing(NPMSM)) {
+if (!missing(NPMSM) && printEstimateTables) {
   for (NPMSMtab in surv_tables) {
     pander::set.caption("NPMSM results for rule '" %+% NPMSMtab[["rule.name"]][1] %+% "'")
     pander::pander(data.frame(NPMSMtab))
@@ -159,6 +172,24 @@ if (!missing(NPMSM)) {
 }
 panderOptions('knitr.auto.asis', TRUE)
 
+
+#'\pagebreak
+#'
+#' `r ifelse(!missing(NPMSM) && plotKM,'# Survival with Kaplan-Meier','')`
+
+#+ echo=FALSE, fig.width=5, fig.height=5, fig.cap = "Survival with KM.\\label{fig:survPlotGCOMP}"
+if (!missing(NPMSM) && plotKM) {
+  sysArg <- list()
+  if (is.data.table(NPMSM)) NPMSM <- list(NPMSM_res = NPMSM)
+  surv_tables <- lapply(NPMSM, '[[', 'IPW_estimates')
+  sysArg$surv_list <- lapply(surv_tables, '[[', 'St.KM')
+  rule.names <- unlist(lapply(surv_tables, function(NPMSM_res) NPMSM_res[['rule.name']][1]))
+  names(sysArg$surv_list) <- paste0("St.KM: ", rule.names)
+  sysArg$t <- NPMSM[[1]][["t"]]
+  userArg <- intersect(names(formals(f_plot_survest)), names(optArgReport)) # captures optional arguments given by user for customizing report
+  if(length(userArg) > 0) sysArg <- c(sysArg, optArgReport[userArg])
+  do.call(f_plot_survest, sysArg)
+}
 
 #'\pagebreak
 #'
@@ -214,7 +245,7 @@ if (!missing(GCOMP)) {
 
 #+ echo=FALSE, results='asis'
 panderOptions('knitr.auto.asis', FALSE)
-if (!missing(GCOMP)) {
+if (!missing(GCOMP) && printEstimateTables) {
   GCOMP.St <- lapply(GCOMP, '[[', "estimates")
   for (GCOMPtab in GCOMP.St) {
     pander::set.caption("GCOMP results for rule '" %+% GCOMPtab[["rule.name"]][1] %+% "'")
@@ -249,7 +280,7 @@ panderOptions('knitr.auto.asis', TRUE)
 #'
 #+ echo=FALSE, results='asis'
 panderOptions('knitr.auto.asis', FALSE)
-if (!missing(TMLE)) {
+if (!missing(TMLE) && printEstimateTables) {
   TMLE.St <- lapply(TMLE, '[[', "estimates")
   for (TMLEtab in TMLE.St) {
     pander::set.caption("TMLE results for rule '" %+% TMLEtab[["rule.name"]][1] %+% "'")

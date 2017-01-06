@@ -12,7 +12,7 @@ gvars$sVartypes <- list(bin = "binary", cat = "categor", cont = "contin")
 gvars$noCENScat <- 0L       # the reference category that designates continuation of follow-up
 
 allowed.fit.package <- c("speedglm", "glm", "h2o")
-allowed.fit.algorithm = c("glm", "gbm", "randomForest", "deeplearning", "SuperLearner")
+allowed.fit.algorithm = c("glm", "gbm", "randomForest", "deeplearning")
 allowed.bin.method = c("equal.mass", "equal.len", "dhist")
 
 #' Querying/setting a single \code{stremr} option
@@ -191,8 +191,8 @@ gvars$misfun <- testmisfun()
   	# packageStartupMessage('Version: ', utils::packageDescription('stremr')$Version)
   	packageStartupMessage('Version: ', utils::packageDescription('stremr')$Version, '\n')
   	packageStartupMessage(
-  "Note that stremr is still in early development state.
-Please check for updates and report bugs at: http://github.com/osofr/stremr.
+  "stremr IS IN EARLY DEVELOPMENT STAGE.
+Please be to sure to check for frequent updates and report bugs at: http://github.com/osofr/stremr
 To install the latest development version of stremr, please type this in your terminal:
   devtools::install_github('osofr/stremr')", '\n')
   	# packageStartupMessage('To see the vignette use vignette("stremr_vignette", package="stremr"). To see all available package documentation use help(package = "stremr") and ?stremr.', '\n')
